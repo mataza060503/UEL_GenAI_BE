@@ -22,6 +22,7 @@ from debug_toolbar.toolbar import debug_toolbar_urls
 urlpatterns = [
     path('admin/', admin.site.urls),
     path('genai/', include('genai.urls')),
+    path('auth/', include('auth.urls'))
 ]
 
 if settings.DEBUG:

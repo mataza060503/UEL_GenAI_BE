@@ -14,6 +14,7 @@ from langchain_community.document_loaders import PyPDFLoader
 from langchain.schema import Document
 from langchain_core.messages import HumanMessage, SystemMessage
 from langchain_core.prompts import ChatPromptTemplate, MessagesPlaceholder
+import tiktoken
 from langchain.chains import create_history_aware_retriever, create_retrieval_chain
 from langchain.chains.combine_documents import create_stuff_documents_chain
 
@@ -31,6 +32,8 @@ from langchain_core.output_parsers import StrOutputParser
 from operator import itemgetter
 
 from utils.pdf_service import PDFService
+from utils import mongodb_service
+from models.message import DB_Message
 
 
 load_dotenv()
@@ -264,7 +267,26 @@ rag_chain = create_retrieval_chain(history_aware_retriever, question_answer_chai
 # Get chat_history from database
 chat_history = []  # Collect chat history here (a sequence of messages)
 
-langchain.debug = True
+#langchain.debug = True
+
+MAX_TOKENS = 4096
+
+# You can use a token counting function (e.g., tiktoken for OpenAI models)
+def calculate_token_count(messages):
+    # Assuming you're using OpenAI's models, you'd use their tokenizer
+    enc = tiktoken.get_encoding("cl100k_base")  # OpenAI GPT models use this encoding
+    total_tokens = 0
+    for message in messages:
+        total_tokens += len(enc.encode(message.content))
+    return total_tokens
+
+# Function to ensure chat history stays within token limit
+def enforce_token_limit(chat_history):
+    total_tokens = calculate_token_count(chat_history)
+    while total_tokens > MAX_TOKENS:
+        chat_history.pop(0)  # Remove the oldest message
+        total_tokens = calculate_token_count(chat_history)
+    return chat_history
 
 @csrf_exempt  # Disable CSRF validation for testing purposes (ensure to enable CSRF protection in production)
 def chat(request):
@@ -273,12 +295,20 @@ def chat(request):
             # Parse the incoming JSON request body
             data = json.loads(request.body)
             query = data.get('message', '')
+            chatId = data.get('chatId', '')
 
             # Ensure that query is not empty
             if not query:
                 return JsonResponse({'error': 'Message cannot be empty'}, status=400)
 
             relevant_docs = retriever.invoke(query)
+
+            msg_collection = DB_Message.objects(ChatId=chatId).order_by('CreateAt')[:5]
+            for msg in msg_collection:
+                chat_history.append(HumanMessage(content=msg.User))
+                chat_history.append(SystemMessage(content=msg.System))
+
+            enforce_token_limit(chat_history)
 
             # Process the user's query through the retrieval chain
             result = rag_chain.invoke({"input": query, "chat_history": chat_history})
@@ -288,6 +318,14 @@ def chat(request):
             response_sources = [doc.metadata.get('source', 'Unknown') for doc in relevant_docs]
 
             # Add query and AI response to chat history
+            # mongodb_service.connect_mongoengine()
+            message = DB_Message(
+                ChatId = chatId,
+                User = query,
+                System = response_content,
+            )
+            message.save()
+
             chat_history.append(HumanMessage(content=query))
             chat_history.append(SystemMessage(content=response_content))
 
