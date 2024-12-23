@@ -3,15 +3,21 @@ from bson import ObjectId
 from datetime import datetime
 import json
 
-class DB_Message(Document):
+class DB_Chat(Document):
     _id = ObjectIdField(default=ObjectId)  # MongoDB ObjectId
-    ChatId = ObjectIdField(required=True)  # Foreign key for chat
-    User = StringField(required=True)
-    System = StringField()
+    AccountId = ObjectIdField(required=True)  # Foreign key for chat
+    Title = StringField(required=True)
     CreateAt = DateTimeField(default=datetime.utcnow)  # Store as DateTimeField
+    UpdateAt = DateTimeField(default=datetime.utcnow)  # Store as DateTimeField
 
     def __str__(self):
         return f"{self.User}: {self.System[:50]}"
+    
+    def to_json(self):
+        # Convert the MongoDB document to a dict and exclude the '_id' field
+        doc_dict = self.to_mongo().to_dict()  # Converts to dict (MongoEngine utility)
+        doc_dict["_id"] = str(doc_dict["_id"])  # Convert ObjectId to string for JSON compatibility
+        return doc_dict
     
     @classmethod
     def queryset_to_json(cls, queryset):
@@ -38,5 +44,5 @@ class DB_Message(Document):
 
     meta = {
         'db_alias': 'core',  # MongoDB alias (optional, but useful for multiple databases)
-        'collection': 'MESSAGES',  # Collection name in MongoDB
+        'collection': 'CHAT_HISTORY',  # Collection name in MongoDB
     }

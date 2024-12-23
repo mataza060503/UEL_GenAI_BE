@@ -319,10 +319,14 @@ def chat(request):
 
             # Add query and AI response to chat history
             # mongodb_service.connect_mongoengine()
+
+            parts = [part.strip() for part in response_content.split("System:") if part.strip()]
+            final_content = parts[0] if parts else ""
+
             message = DB_Message(
                 ChatId = chatId,
                 User = query,
-                System = response_content,
+                System = final_content,
             )
             message.save()
 
