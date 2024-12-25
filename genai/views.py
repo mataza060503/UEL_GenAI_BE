@@ -26,6 +26,7 @@ import pdfplumber
 from PIL import Image
 import pytesseract
 from pdf2image import convert_from_path
+import re
 
 from langchain_core.prompts import ChatPromptTemplate
 from langchain_core.output_parsers import StrOutputParser
@@ -267,26 +268,34 @@ rag_chain = create_retrieval_chain(history_aware_retriever, question_answer_chai
 # Get chat_history from database
 chat_history = []  # Collect chat history here (a sequence of messages)
 
-#langchain.debug = True
+langchain.debug = True
 
-MAX_TOKENS = 4096
+MAX_TOKENS = 3960
+COMPLETION_TOKENS = 256  # Reserve tokens for the completion
 
-# You can use a token counting function (e.g., tiktoken for OpenAI models)
-def calculate_token_count(messages):
-    # Assuming you're using OpenAI's models, you'd use their tokenizer
-    enc = tiktoken.get_encoding("cl100k_base")  # OpenAI GPT models use this encoding
-    total_tokens = 0
-    for message in messages:
-        total_tokens += len(enc.encode(message.content))
-    return total_tokens
-
-# Function to ensure chat history stays within token limit
 def enforce_token_limit(chat_history):
+    # Calculate the total tokens in chat history
     total_tokens = calculate_token_count(chat_history)
-    while total_tokens > MAX_TOKENS:
+
+    # Adjust the limit to leave space for the completion
+    allowed_tokens = MAX_TOKENS - COMPLETION_TOKENS
+
+    # Remove the oldest messages until the history fits within the allowed tokens
+    while total_tokens > allowed_tokens:
         chat_history.pop(0)  # Remove the oldest message
         total_tokens = calculate_token_count(chat_history)
+
     return chat_history
+
+def calculate_token_count(messages):
+    enc = tiktoken.get_encoding("cl100k_base")  # OpenAI GPT tokenizer
+    total_tokens = 0
+
+    for message in messages:
+        # Each message typically includes content, role, and structural tokens
+        total_tokens += len(enc.encode(message.content)) + 4  # Approximate token count for role and structure
+
+    return total_tokens
 
 @csrf_exempt  # Disable CSRF validation for testing purposes (ensure to enable CSRF protection in production)
 def chat(request):
@@ -294,8 +303,8 @@ def chat(request):
         try:
             # Parse the incoming JSON request body
             data = json.loads(request.body)
-            query = data.get('message', '')
-            chatId = data.get('chatId', '')
+            query = data.get('Message', '')
+            chatId = data.get('ChatId', '')
 
             # Ensure that query is not empty
             if not query:
@@ -303,10 +312,13 @@ def chat(request):
 
             relevant_docs = retriever.invoke(query)
 
-            msg_collection = DB_Message.objects(ChatId=chatId).order_by('CreateAt')[:5]
-            for msg in msg_collection:
-                chat_history.append(HumanMessage(content=msg.User))
-                chat_history.append(SystemMessage(content=msg.System))
+            msg_collection = []
+
+            if len(chat_history) == 0:
+                msg_collection = DB_Message.objects(ChatId=chatId).order_by('CreateAt')[:4]
+                for msg in msg_collection:
+                    chat_history.append(HumanMessage(content=msg.User))
+                    chat_history.append(SystemMessage(content=msg.System))
 
             enforce_token_limit(chat_history)
 
@@ -331,10 +343,10 @@ def chat(request):
             message.save()
 
             chat_history.append(HumanMessage(content=query))
-            chat_history.append(SystemMessage(content=response_content))
+            chat_history.append(SystemMessage(content=final_content))
 
             # Return the response in proper encoding
-            return JsonResponse({'response': response_content, 'sources': response_sources}, json_dumps_params={'ensure_ascii': False})
+            return JsonResponse({'response': final_content, 'sources': response_sources}, json_dumps_params={'ensure_ascii': False})
 
         except json.JSONDecodeError:
             return JsonResponse({'error': 'Invalid JSON'}, status=400)
