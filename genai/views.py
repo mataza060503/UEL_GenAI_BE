@@ -268,7 +268,7 @@ rag_chain = create_retrieval_chain(history_aware_retriever, question_answer_chai
 # Get chat_history from database
 chat_history = []  # Collect chat history here (a sequence of messages)
 
-langchain.debug = True
+# langchain.debug = True
 
 MAX_TOKENS = 3960
 COMPLETION_TOKENS = 256  # Reserve tokens for the completion

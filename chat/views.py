@@ -2,11 +2,15 @@ from django.http import JsonResponse
 from django.views import View
 from utils.mongodb_service import get_by_id
 from models.chat import DB_Chat
+from models.message import DB_Message
 from bson.json_util import dumps
 from bson import ObjectId
 import mongoengine
 import json
+from django.views.decorators.csrf import csrf_exempt
+from django.utils.decorators import method_decorator
 
+@method_decorator(csrf_exempt, name='dispatch')
 class ChatView(View):
     async def get(self, request, *args, **kwargs):
         """
@@ -22,7 +26,7 @@ class ChatView(View):
         account_id = ObjectId(account_id_str)
 
         # Fetch the account data from MongoDB
-        data = DB_Chat.objects(AccountId=account_id).order_by('CreateAt')
+        data = DB_Chat.objects(AccountId=account_id).order_by('UpdateAt')
         # result = data.to_json()
         # dicts = json.loads(result)
 
@@ -30,21 +34,27 @@ class ChatView(View):
 
         return JsonResponse(dicts, safe=isinstance(dicts, dict))
     
-    # async def post(self, request, *args, **kwargs):
-    #     """
-    #     Handle POST requests to create a new document.
-    #     """
-    #     try:
-    #         # Parse the JSON body
-    #         data = json.loads(request.body)
-    #         if not data:
-    #             return JsonResponse({"error": "Request body is empty"}, status=400)
+    async def post(self, request, *args, **kwargs):
+        """
+        Handle POST requests to create a new document.
+        """
+        try:
+            # Parse the JSON body
+            data = json.loads(request.body)
+            print(data)
+            if not data:
+                return JsonResponse({"error": "Request body is empty"}, status=400)
 
-    #         # Create a new document in MongoDB
-    #         result = await create_document("ACCOUNT", data)
-    #         return JsonResponse({"message": "Account created successfully", "id": str(result.inserted_id)}, status=201)
-    #     except Exception as e:
-    #         return JsonResponse({"error": str(e)}, status=500)
+            # Create a new document in MongoDB
+            result = DB_Chat(
+                AccountId=data['accountId'],
+                Title=data['title']
+            )
+            result.save()
+
+            return JsonResponse({"message": "Account created successfully", "id": str(result._id)}, status=201)
+        except Exception as e:
+            return JsonResponse({"error": str(e)}, status=500)
 
     # async def put(self, request, *args, **kwargs):
     #     """
@@ -86,16 +96,7 @@ class ChatView(View):
     #         return JsonResponse({"error": str(e)}, status=500)
 
 
-from django.http import JsonResponse
-from django.views import View
-from utils.mongodb_service import get_by_id
-from models.chat import DB_Chat
-from models.message import DB_Message
-from bson.json_util import dumps
-from bson import ObjectId
-import mongoengine
-import json
-
+@method_decorator(csrf_exempt, name='dispatch')
 class MessageView(View):
     async def get(self, request, *args, **kwargs):
         """
