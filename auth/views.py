@@ -2,7 +2,10 @@ from django.http import JsonResponse
 from django.views import View
 from utils.mongodb_service import get_by_id
 from models.account import DB_Account
+from django.views.decorators.csrf import csrf_exempt
+from django.utils.decorators import method_decorator
 
+@method_decorator(csrf_exempt, name='dispatch')
 class View(View):
     async def get(self, request, *args, **kwargs):
         """
@@ -17,4 +20,15 @@ class View(View):
 
         # Fetch the account data from MongoDB
         result = DB_Account.objects(Username=username)
-        return JsonResponse(result, safe=isinstance(result, dict))
+        dicts = DB_Account.queryset_to_json(result)
+
+        if not result:
+            # If no existing account, create a new one
+            new_account = DB_Account(
+                Username=username,
+            )
+            new_account.save()
+
+            return JsonResponse(new_account, safe=isinstance(result, dict))
+
+        return JsonResponse(dicts, safe=isinstance(result, dict))

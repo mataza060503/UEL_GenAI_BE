@@ -114,29 +114,20 @@ def prompt(query):
 
 ## PDF FILE PROCESSEING
 def load_all_pdfs(folder_path):
-    """
-    Load all PDFs in a folder, extract text from each page, and fallback to OCR when needed.
-    :param folder_path: Path to the folder containing PDF files.
-    :return: List of LangChain Document objects containing extracted text and metadata.
-    """
     documents = []
-
     for file in os.listdir(folder_path):
         if file.endswith(".pdf"):
             pdf_path = os.path.join(folder_path, file)
             print(f"Processing: {pdf_path}")
-
             try:
                 with pdfplumber.open(pdf_path) as pdf:
                     for page_number, page in enumerate(pdf.pages, start=1):
                         # Extract text using pdfplumber
                         text = page.extract_text()
-
                         # If no text is found, fallback to OCR
                         if not text or text.strip() == "":
                             print(f"No text found on page {page_number}, using OCR...")
                             text = PDFService.extract_text_with_ocr(pdf_path, page_number)
-
                         # Append text to documents if valid
                         if text and text.strip():
                             documents.append(
@@ -147,7 +138,6 @@ def load_all_pdfs(folder_path):
                             )
             except Exception as e:
                 print(f"Error processing file {file}: {e}")
-
     print(f"Loaded {len(documents)} pages from PDFs.")
     return documents
 #####################################################
@@ -158,7 +148,6 @@ def create_vector_database(file_path, folder_path):
     if not documents:
         print("No documents found to create the vector database.")
         return
-
     # Create a new FAISS index with OpenAI embeddings
     chunks = splitter.split_documents(documents)
     vectorstore_openai = FAISS.from_documents(chunks, embeddings)
@@ -168,13 +157,11 @@ def create_vector_database(file_path, folder_path):
     vectorstore_openai.save_local(VECTOR_DATABASE_FOLDER)
     print(f"FAISS vector database created and saved to {VECTOR_DATABASE_FOLDER}")
 
-
 def update_vector_database(file_path, folder_path):
     new_documents = load_all_pdfs(folder_path)
     if not new_documents:
         print("No new documents found to update the vector database.")
         return
-
     # Load existing FAISS index using FAISS's read_index
     if os.path.exists(file_path):
         index = faiss.read_index(file_path)
@@ -183,11 +170,9 @@ def update_vector_database(file_path, folder_path):
     else:
         print("Error: FAISS index file does not exist. Please create the database first.")
         return
-
     # Add new documents to the existing FAISS index
     vectorstore_openai.add_documents(new_documents)
     print(f"Added {len(new_documents)} new documents to the FAISS index.")
-
     # Save the updated FAISS index back to the file
     faiss.write_index(vectorstore_openai.index, file_path)
     print(f"FAISS vector database updated and saved to {file_path}")
@@ -210,8 +195,6 @@ retriever = vectorstore.as_retriever(
 )
 
 # Contextualize question prompt
-# This system prompt helps the AI understand that it should reformulate the question
-# based on the chat history to make it a standalone question
 contextualize_q_system_prompt = (
     "Given a chat history and the latest user question "
     "which might reference context in the chat history, "
@@ -228,16 +211,11 @@ contextualize_q_prompt = ChatPromptTemplate.from_messages(
         ("human", "{input}"),
     ]
 )
-
 # Create a history-aware retriever
 # This uses the LLM to help reformulate the question based on chat history
 history_aware_retriever = create_history_aware_retriever(
     llm, retriever, contextualize_q_prompt
 )
-
-# Answer question prompt
-# This system prompt helps the AI understand that it should provide concise answers
-# based on the retrieved context and indicates what to do if the answer is unknown
 qa_system_prompt = (
     "You are an assistant for question-answering tasks. Use "
     "the following pieces of retrieved context to answer the "
@@ -247,7 +225,6 @@ qa_system_prompt = (
     "\n\n"
     "{context}"
 )
-
 # Create a prompt template for answering questions
 qa_prompt = ChatPromptTemplate.from_messages(
     [
@@ -268,7 +245,7 @@ rag_chain = create_retrieval_chain(history_aware_retriever, question_answer_chai
 # Get chat_history from database
 chat_history = []  # Collect chat history here (a sequence of messages)
 
-# langchain.debug = True
+langchain.debug = True
 
 MAX_TOKENS = 3960
 COMPLETION_TOKENS = 256  # Reserve tokens for the completion
@@ -276,25 +253,20 @@ COMPLETION_TOKENS = 256  # Reserve tokens for the completion
 def enforce_token_limit(chat_history):
     # Calculate the total tokens in chat history
     total_tokens = calculate_token_count(chat_history)
-
     # Adjust the limit to leave space for the completion
     allowed_tokens = MAX_TOKENS - COMPLETION_TOKENS
-
     # Remove the oldest messages until the history fits within the allowed tokens
     while total_tokens > allowed_tokens:
         chat_history.pop(0)  # Remove the oldest message
         total_tokens = calculate_token_count(chat_history)
-
     return chat_history
 
 def calculate_token_count(messages):
     enc = tiktoken.get_encoding("cl100k_base")  # OpenAI GPT tokenizer
     total_tokens = 0
-
     for message in messages:
         # Each message typically includes content, role, and structural tokens
         total_tokens += len(enc.encode(message.content)) + 4  # Approximate token count for role and structure
-
     return total_tokens
 
 @csrf_exempt  # Disable CSRF validation for testing purposes (ensure to enable CSRF protection in production)
@@ -305,15 +277,11 @@ def chat(request):
             data = json.loads(request.body)
             query = data.get('Message', '')
             chatId = data.get('ChatId', '')
-
             # Ensure that query is not empty
             if not query:
                 return JsonResponse({'error': 'Message cannot be empty'}, status=400)
-
             relevant_docs = retriever.invoke(query)
-
             msg_collection = []
-
             if len(chat_history) == 0:
                 msg_collection = DB_Message.objects(ChatId=chatId).order_by('CreateAt')[:4]
                 for msg in msg_collection:
@@ -321,33 +289,25 @@ def chat(request):
                     chat_history.append(SystemMessage(content=msg.System))
 
             enforce_token_limit(chat_history)
-
             # Process the user's query through the retrieval chain
             result = rag_chain.invoke({"input": query, "chat_history": chat_history})
-
             # Ensure result has an answer
             response_content = result.get('answer', 'Sorry, I did not understand the question.')
             response_sources = [doc.metadata.get('source', 'Unknown') for doc in relevant_docs]
-
             # Add query and AI response to chat history
             # mongodb_service.connect_mongoengine()
-
             parts = [part.strip() for part in response_content.split("System:") if part.strip()]
             final_content = parts[0] if parts else ""
-
             message = DB_Message(
                 ChatId = chatId,
                 User = query,
                 System = final_content,
             )
             message.save()
-
             chat_history.append(HumanMessage(content=query))
             chat_history.append(SystemMessage(content=final_content))
-
             # Return the response in proper encoding
             return JsonResponse({'response': final_content, 'sources': response_sources}, json_dumps_params={'ensure_ascii': False})
-
         except json.JSONDecodeError:
             return JsonResponse({'error': 'Invalid JSON'}, status=400)
         except Exception as e:

@@ -9,6 +9,7 @@ import mongoengine
 import json
 from django.views.decorators.csrf import csrf_exempt
 from django.utils.decorators import method_decorator
+from bson.errors import InvalidId
 
 @method_decorator(csrf_exempt, name='dispatch')
 class ChatView(View):
@@ -17,18 +18,21 @@ class ChatView(View):
         Handle GET requests.
         """
         # Retrieve account_id from query parameters
-        account_id_str = request.GET.get("accountId")  # Use 'accountId' as the parameter name
+        account_id_str = request.GET.get("accountId")
 
         if not account_id_str:
-            # If account_id is not provided, return an error response
             return JsonResponse({"error": "Missing accountId parameter"}, status=400)
-        
-        account_id = ObjectId(account_id_str)
+
+        try:
+            account_id = ObjectId(account_id_str)
+        except InvalidId:
+            return JsonResponse({"error": "Invalid accountId format"}, status=400)
 
         # Fetch the account data from MongoDB
         data = DB_Chat.objects(AccountId=account_id).order_by('UpdateAt')
-        # result = data.to_json()
-        # dicts = json.loads(result)
+
+        if not data:
+            return JsonResponse([], safe=False)
 
         dicts = DB_Chat.queryset_to_json(data)
 
@@ -52,7 +56,7 @@ class ChatView(View):
             )
             result.save()
 
-            return JsonResponse({"message": "Account created successfully", "id": str(result._id)}, status=201)
+            return JsonResponse({"message": "Chat created successfully", "id": str(result._id)}, status=201)
         except Exception as e:
             return JsonResponse({"error": str(e)}, status=500)
 

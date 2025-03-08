@@ -4,38 +4,22 @@ from PIL import Image, ImageOps, ImageFilter
 import os
 
 class PDFService:
-
     @staticmethod
     def preprocess_image(image: Image) -> Image:
-        """
-        Preprocess the image to improve OCR accuracy.
-        - Convert to grayscale.
-        - Apply thresholding to create a binary image.
-        - Optionally apply denoising and other filters.
-        """
         # Convert to grayscale
         image = image.convert("L")
-        
         # Apply thresholding (binarization)
         image = image.point(lambda p: p > 180 and 255)  # Simple threshold
-
         # Optionally apply denoising using a filter (e.g., median filter)
         image = image.filter(ImageFilter.MedianFilter(3))  # Denoising
-
         # Optionally invert image (useful in some cases where black text is on white background)
         image = ImageOps.invert(image)
-
         # You can also resize the image to improve OCR results
-        image = image.resize((image.width * 2, image.height * 2), Image.LANCZOS)  # Double the size
-
+        image = image.resize((image.width * 2, image.height * 2), Image.LANCZOS)
         return image
 
     @staticmethod
     def extract_text_with_ocr(pdf_path, page_number):
-        """
-        Extract text from a PDF file using OCR if the text is not extractable via pdfplumber.
-        Converts PDF pages to images, applies preprocessing, and uses pytesseract for OCR.
-        """
         try:
             pytesseract.pytesseract.tesseract_cmd = r'C:\Program Files\Tesseract-OCR\tesseract.exe'
             # Convert the specified page of the PDF to an image

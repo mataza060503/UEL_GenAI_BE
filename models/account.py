@@ -6,11 +6,11 @@ import json
 class DB_Account(Document):
     _id = ObjectIdField(default=ObjectId)  # MongoDB ObjectId
     Username = StringField(required=True)
-    Password = StringField(required=True)
-    Birth = StringField(required=True)
-    Email = StringField(required=True)
-    Name = StringField(required=True)
-    Phone = StringField(required=True)
+    Password = StringField()
+    Birth = StringField()
+    Email = StringField()
+    Name = StringField()
+    Phone = StringField()
 
 
     def __str__(self):
