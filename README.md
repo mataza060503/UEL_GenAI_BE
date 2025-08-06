@@ -88,9 +88,3 @@ python main.py
 ## 📄 License
 
 This project is developed for academic purposes by students of the University of Economics and Law.
-
-## 👥 Authors
-
-- Duy Thanh Tran  
-- Quang Phuc Nguyen  
-- Hoang Lam Vo
