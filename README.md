@@ -75,6 +75,7 @@ python main.py
 
 | Method | Endpoint                      | Description                        |
 |--------|-------------------------------|------------------------------------|
+| POST   | `/genai/chat`                 | Generate AI response               |
 | GET    | `/auth/?username=...`         | Authenticates or creates a user    |
 | POST   | `/chat/`                      | Submits a user query               |
 | GET    | `/message/?chat_id=...`       | Retrieves messages from a session  |
